@@ -1,0 +1,24 @@
+name: ci
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    - cron: "0 4 * * *"
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: build dev container
+        run: docker build -t devcontainer ./.devcontainer
+        shell: bash
+
+      - name: build and test all services
+        run: docker run -v ${PWD}:/nonroot/home/workspaces/app -v /var/run/docker.sock:/var/run/docker.sock devcontainer make prod-build

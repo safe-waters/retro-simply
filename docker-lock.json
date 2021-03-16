@@ -1,0 +1,87 @@
+{
+	"composefiles": {
+		"docker-compose.dev.yml": [
+			{
+				"name": "node",
+				"tag": "alpine",
+				"digest": "fabc6adac6dba5e150130e10acfc11a81447be93f4bf384076abdb63dbd34033",
+				"dockerfile": "frontend/Dockerfile",
+				"service": "frontend"
+			},
+			{
+				"name": "scratch",
+				"tag": "",
+				"digest": "",
+				"dockerfile": "frontend/Dockerfile",
+				"service": "frontend"
+			}
+		],
+		"docker-compose.prod.yml": [
+			{
+				"name": "golang",
+				"tag": "alpine",
+				"digest": "49c07aa83790aca732250c2258b5912659df31b6bfa2ab428661bc66833769e1",
+				"dockerfile": "server/Dockerfile",
+				"service": "server"
+			},
+			{
+				"name": "scratch",
+				"tag": "",
+				"digest": "",
+				"dockerfile": "server/Dockerfile",
+				"service": "server"
+			}
+		],
+		"docker-compose.yml": [
+			{
+				"name": "golang",
+				"tag": "latest",
+				"digest": "f7d3519759ba6988a2b73b5874b17c5958ac7d0aa48a8b1d84d66ef25fa345f1",
+				"dockerfile": "api/Dockerfile",
+				"service": "api"
+			},
+			{
+				"name": "scratch",
+				"tag": "",
+				"digest": "",
+				"dockerfile": "api/Dockerfile",
+				"service": "api"
+			},
+			{
+				"name": "redis",
+				"tag": "alpine",
+				"digest": "f9577ac6e68c70b518e691406f2bebee49d8db22118fc87bad3b39c16a1cb46e",
+				"dockerfile": "store/Dockerfile",
+				"service": "store"
+			},
+			{
+				"name": "redis",
+				"tag": "alpine",
+				"digest": "f9577ac6e68c70b518e691406f2bebee49d8db22118fc87bad3b39c16a1cb46e",
+				"dockerfile": "broker/Dockerfile",
+				"service": "broker"
+			},
+			{
+				"name": "caddy",
+				"tag": "alpine",
+				"digest": "fa1ae85dc9b12ee47e98d7ef21db409eada3ed48f1865e4b1f1dd78f417132fe",
+				"dockerfile": "reverse_proxy/Dockerfile",
+				"service": "reverse_proxy"
+			},
+			{
+				"name": "caddy",
+				"tag": "alpine",
+				"digest": "fa1ae85dc9b12ee47e98d7ef21db409eada3ed48f1865e4b1f1dd78f417132fe",
+				"dockerfile": "reverse_proxy/Dockerfile",
+				"service": "reverse_proxy"
+			},
+			{
+				"name": "caddy",
+				"tag": "alpine",
+				"digest": "fa1ae85dc9b12ee47e98d7ef21db409eada3ed48f1865e4b1f1dd78f417132fe",
+				"dockerfile": "reverse_proxy/Dockerfile",
+				"service": "reverse_proxy"
+			}
+		]
+	}
+}

@@ -1,0 +1,9 @@
+{$DOMAIN}
+
+encode zstd gzip
+
+route "/api/*" {
+    reverse_proxy "api:{$API_PORT}"
+}
+
+reverse_proxy "server:{$FRONTEND_PORT}"

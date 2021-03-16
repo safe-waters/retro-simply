@@ -1,0 +1,17 @@
+version: '3.9'
+
+services:
+  store:
+    volumes:
+    - store_prod_data:/data
+  reverse_proxy:
+    volumes:
+    - reverse_proxy_prod_data:/data
+  server:
+    build: server
+    environment:
+      PORT: "${FRONTEND_PORT?}"
+
+volumes:
+  reverse_proxy_prod_data:
+  store_prod_data:

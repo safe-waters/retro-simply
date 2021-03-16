@@ -1,0 +1,29 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      target: dev
+  store:
+    volumes:
+    - store_dev_data:/data
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    environment:
+      PORT: "${FRONTEND_PORT?}"
+      VUE_APP_API_VERSION: "${API_VERSION?}"
+    volumes:
+    - "${DEV_HOST_PATH?}/frontend:/app"
+    - node_modules:/app/node_modules
+  reverse_proxy:
+    build:
+      target: dev
+    volumes:
+    - reverse_proxy_dev_data:/data
+
+volumes:
+  reverse_proxy_dev_data:
+  node_modules:
+  store_dev_data:

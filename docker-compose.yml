@@ -1,0 +1,50 @@
+version: '3.9'
+
+services:
+  api:
+    command: ["/app/api"]
+    build:
+      context: ./backend
+      args:
+        CMD: api
+    environment:
+      PORT: "${API_PORT?}"
+      DATA_STORE_URL: "${API_DATA_STORE_URL?}"
+      BROKER_URL: "${API_BROKER_URL?}"
+      QUEUE_URL: "${API_QUEUE_URL?}"
+      SECRET: ${API_SECRET?}
+      VERSION: "${API_VERSION?}"
+      DATA_STORE_POOL_SIZE: "${API_DATA_STORE_POOL_SIZE?}"
+      BROKER_POOL_SIZE: "${API_BROKER_POOL_SIZE?}"
+      QUEUE_POOL_SIZE: "${API_QUEUE_POOL_SIZE?}"
+      QUEUE_KEY: "${API_QUEUE_KEY?}"
+  worker:
+    command: ["/app/worker"]
+    build:
+      context: ./backend
+      args:
+        CMD: worker
+    environment:
+      QUEUE_KEY: "${API_QUEUE_KEY?}"
+      QUEUE_URL: "${API_QUEUE_URL?}"
+      QUEUE_POOL_SIZE: "${API_QUEUE_POOL_SIZE?}"
+      DATA_STORE_URL: "${API_DATA_STORE_URL?}"
+      DATA_STORE_POOL_SIZE: "${API_DATA_STORE_POOL_SIZE?}"
+  store:
+    build: ./redis
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${API_DATA_STORE_PASSWORD?}"]
+  queue:
+    build: ./redis
+    command: ["redis-server", "--requirepass", "${API_QUEUE_PASSWORD?}"]
+  broker:
+    build: ./redis
+    command: ["redis-server", "--requirepass", "${API_BROKER_PASSWORD?}"]
+  reverse_proxy:
+    build: ./reverse_proxy
+    environment:
+      DOMAIN: "${DOMAIN?}"
+      FRONTEND_PORT: "${FRONTEND_PORT?}"
+      API_PORT: "${API_PORT?}"
+    ports:
+    - 80:80
+    - 443:443
