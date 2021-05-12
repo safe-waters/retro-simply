@@ -10,9 +10,9 @@ import (
 
 	"github.com/safe-waters/retro-simply/backend/pkg/auth"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
-	"github.com/safe-waters/retro-simply/backend/pkg/logger"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -74,18 +74,20 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 		"create",
 		trace.WithSpanKind(trace.SpanKindServer),
 	)
-	span.AddEvent("MY LOG")
 	defer span.End()
 
 	rm, err := rg.decodeRoom(w, r)
 	if err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
 		return
 	}
 
 	h, err := rg.phc.HashPassword(rm.Password)
 	if err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		http.Error(
 			w,
@@ -96,7 +98,8 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rg.phs.StoreHashedPassword(r.Context(), rm.Id, h); err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		switch err.(type) {
 		case store.DataAlreadyExistsError:
@@ -113,7 +116,9 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rg.setToken(rm.Id, r, w); err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
 		return
 	}
 
@@ -125,15 +130,27 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	_, span := tr.Start(
+		ctx,
+		"join",
+		trace.WithSpanKind(trace.SpanKindServer),
+	)
+	defer span.End()
+
 	room, err := rg.decodeRoom(w, r)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
 		return
 	}
 
 	h, err := rg.phs.HashedPassword(r.Context(), room.Id)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		switch err.(type) {
 		case store.DataDoesNotExistError:
@@ -150,14 +167,17 @@ func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rg.phc.CompareHashAndPassword(h, room.Password); err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	if err := rg.setToken(room.Id, r, w); err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
 		return
 	}
 
