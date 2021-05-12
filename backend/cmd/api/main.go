@@ -14,6 +14,8 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/handlers"
 	"github.com/safe-waters/retro-simply/backend/pkg/middleware"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
+	"github.com/safe-waters/retro-simply/backend/pkg/tracer_provider"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func mustGetEnvStr(k string) string {
@@ -73,6 +75,10 @@ func applyMiddleware(h http.Handler, mwfs ...func(next http.Handler) http.Handle
 }
 
 func main() {
+	addr := "otel-agent:4317"
+	shutdown := tracer_provider.Initialize(addr, "api")
+	defer shutdown()
+
 	var (
 		dURL    = mustGetEnvStr("DATA_STORE_URL")
 		bURL    = mustGetEnvStr("BROKER_URL")
@@ -121,8 +127,8 @@ func main() {
 		middleware.AuthFunc(j, retRoute),
 	)
 
-	http.Handle(regRoute, reg)
-	http.Handle(retRoute, ret)
+	http.Handle(regRoute, otelhttp.NewHandler(reg, regRoute))
+	http.Handle(retRoute, otelhttp.NewHandler(ret, retRoute))
 
 	http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 }

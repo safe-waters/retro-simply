@@ -48,3 +48,17 @@ services:
     ports:
     - 80:80
     - 443:443
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-collector-config.yml"]
+    volumes:
+      - "${DEV_HOST_PATH?}/otel-collector-config.yml:/etc/otel-collector-config.yml"
+  otel-agent:
+    image: otel/opentelemetry-collector:latest
+    command: ["--config=/etc/otel-agent-config.yml"]
+    volumes:
+      - "${DEV_HOST_PATH?}/otel-agent-config.yml:/etc/otel-agent-config.yml"

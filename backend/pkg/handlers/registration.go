@@ -12,9 +12,13 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"github.com/safe-waters/retro-simply/backend/pkg/logger"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var _ http.Handler = (*Registration)(nil)
+
+var tr = otel.Tracer("pkg/handlers/registration")
 
 type PasswordHashStorer interface {
 	HashedPassword(ctx context.Context, rId string) (string, error)
@@ -63,15 +67,25 @@ func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	_, span := tr.Start(
+		ctx,
+		"create",
+		trace.WithSpanKind(trace.SpanKindServer),
+	)
+	span.AddEvent("MY LOG")
+	defer span.End()
+
 	rm, err := rg.decodeRoom(w, r)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		logger.Error(ctx, err)
 		return
 	}
 
 	h, err := rg.phc.HashPassword(rm.Password)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		logger.Error(ctx, err)
 
 		http.Error(
 			w,
@@ -82,7 +96,7 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rg.phs.StoreHashedPassword(r.Context(), rm.Id, h); err != nil {
-		logger.Error(r.Context(), err)
+		logger.Error(ctx, err)
 
 		switch err.(type) {
 		case store.DataAlreadyExistsError:
@@ -99,7 +113,7 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := rg.setToken(rm.Id, r, w); err != nil {
-		logger.Error(r.Context(), err)
+		logger.Error(ctx, err)
 		return
 	}
 

@@ -1,0 +1,24 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+  jaeger:
+    protocols:
+      grpc:
+
+exporters:
+  otlp:
+    endpoint: "otel-collector:4317"
+    insecure: true
+  logging:
+    loglevel: debug
+
+processors:
+  batch:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp, jaeger]
+      processors: [batch]
+      exporters: [otlp, logging]
