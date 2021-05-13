@@ -76,9 +76,7 @@ func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	_, span := regTr.Start(ctx, "create")
+	_, span := regTr.Start(r.Context(), "create")
 	defer span.End()
 
 	rm, err := rg.decodeRoom(w, r)
@@ -136,9 +134,7 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	_, span := regTr.Start(ctx, "join")
+	_, span := regTr.Start(r.Context(), "join")
 	defer span.End()
 
 	room, err := rg.decodeRoom(w, r)
