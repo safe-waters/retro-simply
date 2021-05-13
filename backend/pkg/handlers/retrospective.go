@@ -13,6 +13,7 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var _ http.Handler = (*Retrospective)(nil)
@@ -88,7 +89,6 @@ func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c := newClient(wsc, rt.ps, rt.p, rt.st, rt.pKey)
 
-	ctx = user.WithContext(context.Background(), u)
 	go c.run(ctx, u.RoomId)
 }
 
@@ -137,7 +137,10 @@ func newClient(
 }
 
 func (c *client) run(ctx context.Context, rId string) {
-	ctx, span := retTr.Start(ctx, "run")
+	span := trace.SpanFromContext(ctx)
+	ctx = trace.ContextWithSpan(context.Background(), span)
+
+	ctx, span = retTr.Start(ctx, "run")
 	ctx, cancel := context.WithCancel(ctx)
 
 	span.AddEvent("client started")
