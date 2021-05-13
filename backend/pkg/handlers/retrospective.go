@@ -9,12 +9,15 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
-	"github.com/safe-waters/retro-simply/backend/pkg/logger"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 var _ http.Handler = (*Retrospective)(nil)
+
+var retTr = otel.Tracer("pkg/handlers/retrospective")
 
 type Stater interface {
 	State(ctx context.Context, rId string) (*data.State, error)
@@ -51,9 +54,16 @@ func NewRetrospective(
 }
 
 func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx, span := retTr.Start(r.Context(), "ServeHTTP")
+	defer span.End()
+
+	r = r.WithContext(ctx)
+
 	u, ok := user.FromContext(r.Context())
 	if !ok || u.RoomId == "" {
-		logger.Error(r.Context(), fmt.Errorf("user '%v' incorrectly set", u))
+		err := fmt.Errorf("user '%v' incorrectly set", u)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		http.Error(
 			w,
@@ -66,7 +76,8 @@ func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	wsc, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		http.Error(
 			w,
@@ -79,7 +90,7 @@ func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	c := newClient(wsc, rt.ps, rt.p, rt.st, rt.pKey)
 
-	ctx := user.WithContext(context.Background(), u)
+	ctx = user.WithContext(context.Background(), u)
 	go c.run(ctx, u.RoomId)
 }
 
@@ -128,23 +139,29 @@ func newClient(
 }
 
 func (c *client) run(ctx context.Context, rId string) {
-	logger.Info(ctx, "client started")
-
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, span := retTr.Start(ctx, "run")
+	defer span.End()
 
-	go func() {
+	go func(ctx context.Context) {
+		_, span := retTr.Start(ctx, "wait")
+		defer span.End()
+
+		span.AddEvent("client started")
+
 		<-c.wDone
 		<-c.rDone
 
 		cancel()
 		c.wsc.Close()
 
-		logger.Info(ctx, "client ended")
-	}()
+		span.AddEvent("client ended")
+	}(ctx)
 
 	br, err := c.ps.Subscribe(ctx, rId)
 	if err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		close(c.wDone)
 		close(c.rDone)
@@ -156,12 +173,15 @@ func (c *client) run(ctx context.Context, rId string) {
 	if err != nil {
 		switch err.(type) {
 		case store.DataDoesNotExistError:
+			span.AddEvent("data does not exist")
+
 			go c.readMessages(ctx, rId)
 			go c.writeMessages(ctx, br)
 
 			return
 		default:
-			logger.Error(ctx, err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
 
 			close(c.wDone)
 			close(c.rDone)
@@ -171,7 +191,8 @@ func (c *client) run(ctx context.Context, rId string) {
 	}
 
 	if err := c.wsc.WriteJSON(s); err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 
 		close(c.wDone)
 		close(c.rDone)
@@ -184,9 +205,13 @@ func (c *client) run(ctx context.Context, rId string) {
 }
 
 func (c *client) readMessages(ctx context.Context, rId string) {
-	logger.Info(ctx, "read loop started")
+	ctx, span := retTr.Start(ctx, "readMessages")
+	defer span.End()
+
+	span.AddEvent("read loop started")
+
 	defer func() {
-		logger.Info(ctx, "read loop ended")
+		span.AddEvent("read loop ended")
 		close(c.rDone)
 	}()
 
@@ -206,25 +231,29 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 			var s data.State
 
 			if err := c.wsc.ReadJSON(&s); err != nil {
-				logger.Info(ctx, "could not read state")
+				span.AddEvent("could not read state")
 				return
 			}
 
 			if s.RoomId != rId {
-				logger.Error(
-					ctx,
-					errors.New("read state contains the wrong roomId"),
-				)
+				err := errors.New("read state contains the wrong roomId")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+
 				return
 			}
 
 			if err := c.ps.Publish(ctx, rId, &s); err != nil {
-				logger.Error(ctx, err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+
 				return
 			}
 
 			if err := c.p.Publish(ctx, c.pKey, &s); err != nil {
-				logger.Error(ctx, err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+
 				return
 			}
 		}
@@ -232,9 +261,13 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 }
 
 func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
-	logger.Info(ctx, "write loop started")
+	ctx, span := retTr.Start(ctx, "writeMessages")
+	defer span.End()
+
+	span.AddEvent("write loop started")
+
 	defer func() {
-		logger.Info(ctx, "write loop ended")
+		span.AddEvent("write loop ended")
 		close(c.wDone)
 	}()
 
@@ -245,13 +278,18 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
 		select {
 		case s, ok := <-br:
 			if !ok {
-				logger.Error(ctx, errors.New("broadcast closed"))
+				err := errors.New("broadcast closed")
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+
 				return
 			}
 
 			_ = c.wsc.SetWriteDeadline(time.Now().Add(wWait))
 			if err := c.wsc.WriteJSON(s); err != nil {
-				logger.Error(ctx, err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+
 				return
 			}
 		case <-t.C:
@@ -259,7 +297,9 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
 			if err := c.wsc.WriteMessage(
 				websocket.PingMessage, nil,
 			); err != nil {
-				logger.Error(ctx, err)
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
+
 				return
 			}
 		case <-ctx.Done():

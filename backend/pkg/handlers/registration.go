@@ -17,7 +17,7 @@ import (
 
 var _ http.Handler = (*Registration)(nil)
 
-var tr = otel.Tracer("pkg/handlers/registration")
+var regTr = otel.Tracer("pkg/handlers/registration")
 
 type PasswordHashStorer interface {
 	HashedPassword(ctx context.Context, rId string) (string, error)
@@ -55,7 +55,7 @@ func NewRegistration(
 }
 
 func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx, span := tr.Start(r.Context(), "ServeHTTP")
+	ctx, span := regTr.Start(r.Context(), "ServeHTTP")
 	defer span.End()
 
 	r = r.WithContext(ctx)
@@ -78,7 +78,7 @@ func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	_, span := tr.Start(ctx, "create")
+	_, span := regTr.Start(ctx, "create")
 	defer span.End()
 
 	rm, err := rg.decodeRoom(w, r)
@@ -138,7 +138,7 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	_, span := tr.Start(ctx, "join")
+	_, span := regTr.Start(ctx, "join")
 	defer span.End()
 
 	room, err := rg.decodeRoom(w, r)
