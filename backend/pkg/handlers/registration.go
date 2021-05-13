@@ -13,7 +13,6 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 )
 
 var _ http.Handler = (*Registration)(nil)
@@ -56,12 +55,22 @@ func NewRegistration(
 }
 
 func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch strings.TrimPrefix(r.URL.Path, rg.route) {
+	ctx, span := tr.Start(r.Context(), "ServeHTTP")
+	defer span.End()
+
+	r = r.WithContext(ctx)
+
+	p := strings.TrimPrefix(r.URL.Path, rg.route)
+	switch p {
 	case "create":
 		rg.create(w, r)
 	case "join":
 		rg.join(w, r)
 	default:
+		err := fmt.Errorf("'%s' not found", p)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
 		http.NotFound(w, r)
 	}
 }
@@ -69,11 +78,7 @@ func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	_, span := tr.Start(
-		ctx,
-		"create",
-		trace.WithSpanKind(trace.SpanKindServer),
-	)
+	_, span := tr.Start(ctx, "create")
 	defer span.End()
 
 	rm, err := rg.decodeRoom(w, r)
@@ -94,6 +99,7 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 			http.StatusText(http.StatusInternalServerError),
 			http.StatusInternalServerError,
 		)
+
 		return
 	}
 
@@ -132,11 +138,7 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	_, span := tr.Start(
-		ctx,
-		"join",
-		trace.WithSpanKind(trace.SpanKindServer),
-	)
+	_, span := tr.Start(ctx, "join")
 	defer span.End()
 
 	room, err := rg.decodeRoom(w, r)
