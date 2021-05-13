@@ -206,9 +206,10 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 	span.AddEvent("read loop started")
 
 	defer func() {
+		close(c.rDone)
+
 		span.AddEvent("read loop ended")
 		span.End()
-		close(c.rDone)
 	}()
 
 	_ = c.wsc.SetReadDeadline(time.Now().Add(pWait))
@@ -262,9 +263,10 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
 	span.AddEvent("write loop started")
 
 	defer func() {
+		close(c.wDone)
+
 		span.AddEvent("write loop ended")
 		span.End()
-		close(c.wDone)
 	}()
 
 	t := time.NewTicker(pPeriod)

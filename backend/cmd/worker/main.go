@@ -10,9 +10,13 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/broker"
 	"github.com/safe-waters/retro-simply/backend/pkg/client"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
-	"github.com/safe-waters/retro-simply/backend/pkg/logger"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
+	"github.com/safe-waters/retro-simply/backend/pkg/tracer_provider"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var tr = otel.Tracer("cmd/worker/main")
 
 func mustGetEnvStr(k string) string {
 	v := os.Getenv(k)
@@ -63,16 +67,26 @@ loop:
 }
 
 func storeState(ctx context.Context, st *data.State, s *store.S) {
+	ctx, span := tr.Start(ctx, "store state")
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer func() { cancel() }()
+
+	defer func() {
+		cancel()
+		span.End()
+	}()
 
 	_, err := s.StoreState(ctx, st)
 	if err != nil {
-		logger.Error(ctx, err)
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 	}
 }
 
 func main() {
+	addr := "otel-agent:4317"
+	shutdown := tracer_provider.Initialize(addr, "api")
+	defer shutdown()
+
 	var (
 		dURL  = mustGetEnvStr("DATA_STORE_URL")
 		dPool = mustGetEnvInt("DATA_STORE_POOL_SIZE")
