@@ -57,9 +57,7 @@ func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ctx, span := retTr.Start(r.Context(), "ServeHTTP")
 	defer span.End()
 
-	r = r.WithContext(ctx)
-
-	u, ok := user.FromContext(r.Context())
+	u, ok := user.FromContext(ctx)
 	if !ok || u.RoomId == "" {
 		err := fmt.Errorf("user '%v' incorrectly set", u)
 		span.RecordError(err)
@@ -139,15 +137,13 @@ func newClient(
 }
 
 func (c *client) run(ctx context.Context, rId string) {
-	ctx, cancel := context.WithCancel(ctx)
 	ctx, span := retTr.Start(ctx, "run")
-	defer span.End()
+	ctx, cancel := context.WithCancel(ctx)
+
+	span.AddEvent("client started")
 
 	go func(ctx context.Context) {
-		_, span := retTr.Start(ctx, "wait")
 		defer span.End()
-
-		span.AddEvent("client started")
 
 		<-c.wDone
 		<-c.rDone
@@ -206,12 +202,12 @@ func (c *client) run(ctx context.Context, rId string) {
 
 func (c *client) readMessages(ctx context.Context, rId string) {
 	ctx, span := retTr.Start(ctx, "readMessages")
-	defer span.End()
 
 	span.AddEvent("read loop started")
 
 	defer func() {
 		span.AddEvent("read loop ended")
+		span.End()
 		close(c.rDone)
 	}()
 
@@ -231,7 +227,7 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 			var s data.State
 
 			if err := c.wsc.ReadJSON(&s); err != nil {
-				span.AddEvent("could not read state")
+				span.RecordError(err)
 				return
 			}
 
@@ -262,12 +258,12 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 
 func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
 	ctx, span := retTr.Start(ctx, "writeMessages")
-	defer span.End()
 
 	span.AddEvent("write loop started")
 
 	defer func() {
 		span.AddEvent("write loop ended")
+		span.End()
 		close(c.wDone)
 	}()
 
