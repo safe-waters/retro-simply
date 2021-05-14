@@ -6,8 +6,11 @@ import (
 
 	"github.com/safe-waters/retro-simply/backend/pkg/client"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
-	"github.com/safe-waters/retro-simply/backend/pkg/logger"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var tr = otel.Tracer("pkg/broker/broker")
 
 type PubSuber interface {
 	Publish(ctx context.Context, channel string, message interface{}) client.Err
@@ -22,11 +25,17 @@ func (b *B) Subscribe(
 	ctx context.Context,
 	rId string,
 ) (<-chan *data.State, error) {
+	ctx, span := tr.Start(ctx, "broker subscribe")
+	defer span.End()
+
 	p := b.ps.Subscribe(ctx, rId)
 
 	// Ensure subscription is created before returning channel
 	_, err := p.Receive(ctx)
 	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+
 		_ = p.Close()
 
 		return nil, err
@@ -36,6 +45,9 @@ func (b *B) Subscribe(
 	sCh := make(chan *data.State)
 
 	go func() {
+		ctx, span := tr.Start(ctx, "broker listening")
+		defer span.End()
+
 		defer close(sCh)
 		defer p.Close()
 
@@ -45,7 +57,8 @@ func (b *B) Subscribe(
 				s := &data.State{}
 				err := json.Unmarshal([]byte(msg.Payload), s)
 				if err != nil {
-					logger.Error(ctx, err)
+					span.RecordError(err)
+
 					continue
 				}
 
