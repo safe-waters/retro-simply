@@ -77,6 +77,9 @@ func (b *B) Subscribe(
 }
 
 func (b *B) Publish(ctx context.Context, rId string, s *data.State) error {
+	ctx, span := tr.Start(ctx, "broker publish")
+	defer span.End()
+
 	byt, err := json.Marshal(s)
 	if err != nil {
 		return err
