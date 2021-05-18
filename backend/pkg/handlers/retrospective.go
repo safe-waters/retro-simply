@@ -28,6 +28,10 @@ type Puber interface {
 	Publish(ctx context.Context, rId string, s *data.State) error
 }
 
+type RemotePuber interface {
+	RemotePublish(ctx context.Context, rId string, s *data.State) error
+}
+
 type PubSuber interface {
 	Subscribe(ctx context.Context, rId string) (<-chan *data.State, error)
 	Puber
@@ -36,14 +40,14 @@ type PubSuber interface {
 type Retrospective struct {
 	st   Stater
 	ps   PubSuber
-	p    Puber
+	p    RemotePuber
 	pKey string
 }
 
 func NewRetrospective(
 	st Stater,
 	ps PubSuber,
-	p Puber,
+	p RemotePuber,
 	pKey string,
 ) *Retrospective {
 	return &Retrospective{
@@ -111,7 +115,7 @@ type wsConn interface {
 type client struct {
 	wsc   wsConn
 	ps    PubSuber
-	p     Puber
+	p     RemotePuber
 	st    Stater
 	pKey  string
 	wDone chan struct{}
@@ -121,7 +125,7 @@ type client struct {
 func newClient(
 	wsc wsConn,
 	ps PubSuber,
-	p Puber,
+	p RemotePuber,
 	st Stater,
 	pKey string,
 ) *client {
@@ -250,7 +254,7 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 				return
 			}
 
-			if err := c.p.Publish(ctx, c.pKey, &s); err != nil {
+			if err := c.p.RemotePublish(ctx, c.pKey, &s); err != nil {
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 
