@@ -14,7 +14,7 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/tracer_provider"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 var tr = otel.Tracer("cmd/worker/main")
@@ -105,15 +105,17 @@ func main() {
 	}
 
 	for rs := range br {
-		sctx := trace.NewSpanContext(
-			trace.SpanContextConfig{
-				TraceID: rs.TraceID,
-				SpanID:  rs.SpanID,
-				Remote:  rs.Remote,
-			},
-		)
+		// sctx := trace.NewSpanContext(
+		// 	trace.SpanContextConfig{
+		// 		TraceID: rs.TraceID,
+		// 		SpanID:  rs.SpanID,
+		// 		Remote:  rs.Remote,
+		// 	},
+		// )
 
-		ctx := trace.ContextWithRemoteSpanContext(context.Background(), sctx)
+		// ctx := trace.ContextWithRemoteSpanContext(context.Background(), sctx)
+		var pr propagation.TraceContext
+		ctx := pr.Extract(context.Background(), broker.NewProducerMessageCarrier(rs))
 		go storeState(ctx, rs.State, s)
 	}
 }

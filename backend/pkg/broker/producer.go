@@ -1,6 +1,9 @@
 package broker
 
 import (
+	"encoding/hex"
+	"fmt"
+
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -15,23 +18,37 @@ type TextMapCarrier interface {
 
 var _ propagation.TextMapCarrier = (*ProducerMessageCarrier)(nil)
 
-type ProducerMessageCarrier struct{}
-
-func NewProducerMessageCarrier(msg string) {
+type ProducerMessageCarrier struct {
+	RemoteState *RemoteState
 }
 
-func (p *ProducerMessageCarrier) Get(key string) string { return "" }
+// https://www.w3.org/TR/trace-context/#traceparent-header
+// https://github.com/open-telemetry/opentelemetry-go/blob/d616df61f5d163589228c5ff3be4aa5415f5a884/propagation/trace_context_test.go#L38
+func NewProducerMessageCarrier(rs *RemoteState) *ProducerMessageCarrier {
+	return &ProducerMessageCarrier{RemoteState: rs}
+}
+
+func (p *ProducerMessageCarrier) Get(key string) string {
+	//tp := "00-" + string(p.RemoteState.TraceID[:]) + "-" + string(p.RemoteState.SpanID[:]) + "-08"
+
+	// equivalent header
+	// sctx := trace.NewSpanContext(
+	// 	trace.SpanContextConfig{
+	// 		TraceID: rs.TraceID,
+	// 		SpanID:  rs.SpanID,
+	// 		Remote:  rs.Remote,
+	// 	},
+	// )
+
+	tp := "00-" + hex.EncodeToString(p.RemoteState.TraceID[:]) + "-" + hex.EncodeToString(p.RemoteState.SpanID[:]) + "-00"
+	fmt.Println("THIS IS THE TRACEPARENT", tp)
+	return tp
+}
 
 func (p *ProducerMessageCarrier) Set(key string, value string) {
-
+	fmt.Println("SET CALLED")
 }
 
 func (p *ProducerMessageCarrier) Keys() []string {
-	var pr propagation.TraceContext
-	return pr.Fields()
-	// // p.Set(key string, value string)
-	// pr.Inject(context.Background(), p)
-	// pr.Extract(context.Background(), p)
-
-	//return nil
+	return []string{"traceparent"}
 }
