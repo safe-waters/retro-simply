@@ -9,13 +9,12 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
 )
 
-type RemoteState struct {
-	State   *data.State
-	TraceID [16]byte
-	SpanID  [8]byte
-	Remote  bool
+type Message struct {
+	State       *data.State
+	TraceParent string `json:"traceparent"` // https://www.w3.org/TR/trace-context/#traceparent-header
 }
 
 var tr = otel.Tracer("pkg/broker/broker")
@@ -104,19 +103,15 @@ func (b *B) RemotePublish(ctx context.Context, rId string, s *data.State) error 
 	ctx, span := tr.Start(ctx, "broker remote publish")
 	defer span.End()
 
-	sctx := span.SpanContext()
+	rs := &Message{State: s}
 
-	rs := &RemoteState{
-		State:   s,
-		TraceID: sctx.TraceID(),
-		SpanID:  sctx.SpanID(),
-		Remote:  true,
-	}
+	var pr propagation.TraceContext
+	pr.Inject(ctx, NewProducerMessageCarrier(rs))
+
 	byt, err := json.Marshal(rs)
 	if err != nil {
 		return err
 	}
-	fmt.Println("THIS IS THE REMOTE PUBLISH", string(byt))
 
 	if err = b.ps.Publish(ctx, rId, byt).Err(); err != nil {
 		return err
@@ -128,7 +123,7 @@ func (b *B) RemotePublish(ctx context.Context, rId string, s *data.State) error 
 func (b *B) RemoteSubscribe(
 	ctx context.Context,
 	rId string,
-) (<-chan *RemoteState, error) {
+) (<-chan *Message, error) {
 	ctx, span := tr.Start(ctx, "broker remote subscribe")
 	defer span.End()
 
@@ -146,7 +141,7 @@ func (b *B) RemoteSubscribe(
 	}
 
 	pCh := p.Channel()
-	sCh := make(chan *RemoteState)
+	sCh := make(chan *Message)
 
 	go func() {
 		ctx, span := tr.Start(ctx, "remote broker listening")
@@ -158,7 +153,7 @@ func (b *B) RemoteSubscribe(
 		for {
 			select {
 			case msg := <-pCh:
-				s := &RemoteState{}
+				s := &Message{}
 				err := json.Unmarshal([]byte(msg.Payload), s)
 				if err != nil {
 					span.RecordError(err)
