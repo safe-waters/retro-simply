@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/safe-waters/retro-simply/backend/pkg/client"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
@@ -13,8 +14,14 @@ import (
 )
 
 type Message struct {
-	State       *data.State
-	TraceParent string `json:"traceparent"` // https://www.w3.org/TR/trace-context/#traceparent-header
+	State *data.State
+	// Since redis' pubsub protocol does not have headers like the
+	// HTTP protocol, use the span context to set the same headers that
+	// would be in an HTTP request. Specifically, the 'traceparent' header
+	// that contains the trace ID and span ID:
+	// https://github.com/open-telemetry/opentelemetry-go/blob/d616df61f5d163589228c5ff3be4aa5415f5a884/propagation/trace_context_test.go#L38
+	// https://www.w3.org/TR/trace-context/#traceparent-header
+	Headers http.Header
 }
 
 var tr = otel.Tracer("pkg/broker/broker")
@@ -103,10 +110,10 @@ func (b *B) RemotePublish(ctx context.Context, rId string, s *data.State) error 
 	ctx, span := tr.Start(ctx, "broker remote publish")
 	defer span.End()
 
-	rs := &Message{State: s}
+	rs := &Message{State: s, Headers: map[string][]string{}}
 
 	var pr propagation.TraceContext
-	pr.Inject(ctx, NewProducerMessageCarrier(rs))
+	pr.Inject(ctx, propagation.HeaderCarrier(rs.Headers))
 
 	byt, err := json.Marshal(rs)
 	if err != nil {

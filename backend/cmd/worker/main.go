@@ -115,7 +115,7 @@ func main() {
 
 		// ctx := trace.ContextWithRemoteSpanContext(context.Background(), sctx)
 		var pr propagation.TraceContext
-		ctx := pr.Extract(context.Background(), broker.NewProducerMessageCarrier(rs))
+		ctx := pr.Extract(context.Background(), propagation.HeaderCarrier(rs.Headers))
 		go storeState(ctx, rs.State, s)
 	}
 }
