@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/safe-waters/retro-simply/backend/pkg/broker"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
@@ -28,26 +29,22 @@ type Puber interface {
 	Publish(ctx context.Context, rId string, s *data.State) error
 }
 
-type RemotePuber interface {
-	RemotePublish(ctx context.Context, rId string, s *data.State) error
-}
-
 type PubSuber interface {
-	Subscribe(ctx context.Context, rId string) (<-chan *data.State, error)
+	Subscribe(ctx context.Context, rId string) (<-chan *broker.Message, error)
 	Puber
 }
 
 type Retrospective struct {
 	st   Stater
 	ps   PubSuber
-	p    RemotePuber
+	p    Puber
 	pKey string
 }
 
 func NewRetrospective(
 	st Stater,
 	ps PubSuber,
-	p RemotePuber,
+	p Puber,
 	pKey string,
 ) *Retrospective {
 	return &Retrospective{
@@ -115,7 +112,7 @@ type wsConn interface {
 type client struct {
 	wsc   wsConn
 	ps    PubSuber
-	p     RemotePuber
+	p     Puber
 	st    Stater
 	pKey  string
 	wDone chan struct{}
@@ -125,7 +122,7 @@ type client struct {
 func newClient(
 	wsc wsConn,
 	ps PubSuber,
-	p RemotePuber,
+	p Puber,
 	st Stater,
 	pKey string,
 ) *client {
@@ -254,7 +251,7 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 				return
 			}
 
-			if err := c.p.RemotePublish(ctx, c.pKey, &s); err != nil {
+			if err := c.p.Publish(ctx, c.pKey, &s); err != nil {
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 
@@ -264,7 +261,7 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 	}
 }
 
-func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
+func (c *client) writeMessages(ctx context.Context, br <-chan *broker.Message) {
 	ctx, span := retTr.Start(ctx, "writeMessages")
 
 	span.AddEvent("write loop started")
@@ -281,7 +278,7 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
 
 	for {
 		select {
-		case s, ok := <-br:
+		case m, ok := <-br:
 			if !ok {
 				err := errors.New("broadcast closed")
 				span.RecordError(err)
@@ -291,7 +288,7 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *data.State) {
 			}
 
 			_ = c.wsc.SetWriteDeadline(time.Now().Add(wWait))
-			if err := c.wsc.WriteJSON(s); err != nil {
+			if err := c.wsc.WriteJSON(m.State); err != nil {
 				span.RecordError(err)
 				span.SetStatus(codes.Error, err.Error())
 

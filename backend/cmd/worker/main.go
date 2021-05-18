@@ -99,7 +99,7 @@ func main() {
 	q := broker.New(mustNewRedisClient(qURL, qPool))
 	s := store.New(mustNewRedisClient(dURL, dPool))
 
-	br, err := q.RemoteSubscribe(context.Background(), qKey)
+	br, err := q.Subscribe(context.Background(), qKey)
 	if err != nil {
 		panic(err)
 	}

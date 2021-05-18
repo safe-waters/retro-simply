@@ -140,7 +140,7 @@ func TestBroker(t *testing.T) {
 	b.Publish(ctx, rId, &es)
 
 	gs := <-sCh
-	expectState(t, &es, gs)
+	expectState(t, &es, gs.State)
 
 	cancel()
 
@@ -158,7 +158,7 @@ func expectState(t *testing.T, expected, got interface{}) {
 	}
 }
 
-func expectCloseStateChannel(t *testing.T, sCh <-chan *data.State) {
+func expectCloseStateChannel(t *testing.T, sCh <-chan *Message) {
 	select {
 	case _, ok := <-sCh:
 		if ok {
