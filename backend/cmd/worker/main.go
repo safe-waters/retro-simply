@@ -82,17 +82,17 @@ func storeState(ctx context.Context, st *data.State, s *store.S) {
 }
 
 func main() {
-	addr := "otel-agent:4317"
-	shutdown := tracer_provider.Initialize(addr, "api")
-	defer shutdown()
-
 	var (
-		dURL  = mustGetEnvStr("DATA_STORE_URL")
-		dPool = mustGetEnvInt("DATA_STORE_POOL_SIZE")
-		qURL  = mustGetEnvStr("QUEUE_URL")
-		qPool = mustGetEnvInt("QUEUE_POOL_SIZE")
-		qKey  = mustGetEnvStr("QUEUE_KEY")
+		otelURL = mustGetEnvStr("OTEL_AGENT_URL")
+		dURL    = mustGetEnvStr("DATA_STORE_URL")
+		dPool   = mustGetEnvInt("DATA_STORE_POOL_SIZE")
+		qURL    = mustGetEnvStr("QUEUE_URL")
+		qPool   = mustGetEnvInt("QUEUE_POOL_SIZE")
+		qKey    = mustGetEnvStr("QUEUE_KEY")
 	)
+
+	shutdown := tracer_provider.Initialize(otelURL, "worker")
+	defer shutdown()
 
 	q := broker.New(mustNewRedisClient(qURL, qPool))
 	s := store.New(mustNewRedisClient(dURL, dPool))

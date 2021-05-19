@@ -75,11 +75,8 @@ func applyMiddleware(h http.Handler, mwfs ...func(next http.Handler) http.Handle
 }
 
 func main() {
-	addr := "otel-agent:4317"
-	shutdown := tracer_provider.Initialize(addr, "api")
-	defer shutdown()
-
 	var (
+		otelURL = mustGetEnvStr("OTEL_AGENT_URL")
 		dURL    = mustGetEnvStr("DATA_STORE_URL")
 		bURL    = mustGetEnvStr("BROKER_URL")
 		qURL    = mustGetEnvStr("QUEUE_URL")
@@ -91,6 +88,9 @@ func main() {
 		qPool   = mustGetEnvInt("QUEUE_POOL_SIZE")
 		qKey    = mustGetEnvStr("QUEUE_KEY")
 	)
+
+	shutdown := tracer_provider.Initialize(otelURL, "api")
+	defer shutdown()
 
 	s := store.New(mustNewRedisClient(dURL, dPool))
 	b := broker.New(mustNewRedisClient(bURL, bPool))
