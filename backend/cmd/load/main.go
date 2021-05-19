@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -82,21 +81,21 @@ func createRoom() (*cookiejar.Jar, string, error) {
 		return nil, "", err
 	}
 
-	roomId := uuid.New().String()
+	rId := uuid.New().String()
 
-	body, err := json.Marshal(
-		map[string]string{"id": roomId, "password": "test"},
+	b, err := json.Marshal(
+		map[string]string{"id": rId, "password": "test"},
 	)
 	if err != nil {
 		return nil, "", err
 	}
 
-	req := &http.Request{
+	r := &http.Request{
 		Method: "POST",
 		Header: map[string][]string{
 			"Content-Type": {"application/json"},
 		},
-		Body: io.NopCloser(bytes.NewReader(body)),
+		Body: io.NopCloser(bytes.NewReader(b)),
 		URL: &url.URL{
 			Scheme: "https",
 			Host:   "localhost",
@@ -104,69 +103,73 @@ func createRoom() (*cookiejar.Jar, string, error) {
 		},
 	}
 
-	// Setup HTTPS client
-	tlsConfig := &tls.Config{InsecureSkipVerify: true}
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
-
 	client := &http.Client{
-		Jar:       jar,
-		Transport: transport,
+		Jar: jar,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 
-	resp, err := client.Do(req)
+	resp, err := client.Do(r)
 	if err != nil {
 		return nil, "", err
 	}
 
-	roomPath := resp.Header.Get("Content-Location")
-	log.Println(resp.StatusCode, resp.Status)
-	roomId = roomPath[strings.LastIndex(roomPath, "?")+len("?roomId="):]
+	if resp.StatusCode != http.StatusCreated {
+		return nil, "", fmt.Errorf(
+			"creating room failed with status code %d",
+			resp.StatusCode,
+		)
+	}
 
-	return jar, roomId, nil
+	p := resp.Header.Get("Content-Location")
+	rId = p[strings.LastIndex(p, "?")+len("?roomId="):]
 
-}
-
-type duration struct {
-	kind   string
-	length float64
+	return jar, rId, nil
 }
 
 func main() {
-	endNum := 10000
-	newRoomTicker := time.NewTicker(5 * time.Second)
-	numRoomsTicker := time.NewTicker(1 * time.Second)
-	done := make(chan struct{})
-	var numRooms uint64 = 0
+	var (
+		endNumRooms       uint64 = 1000
+		numRooms          uint64 = 0
+		numClientsPerRoom        = 10
+		numRoomsPerEpoch         = 20
+		epochTicker              = time.NewTicker(5 * time.Second)
+		progressTicker           = time.NewTicker(1 * time.Second)
+	)
 
 	go func() {
-		var secs uint
+		var secs int
+
 		for {
-			<-numRoomsTicker.C
+			<-progressTicker.C
+
 			n := atomic.LoadUint64(&numRooms)
-			fmt.Printf("snapshot at %ds - running: %d rooms\n", secs, n)
+			fmt.Printf("snapshot at %ds - running: %d rooms (%d clients) \n", secs, n, numClientsPerRoom*int(n))
 			secs++
 		}
 	}()
 
 	for {
-		<-newRoomTicker.C
+		<-epochTicker.C
 
-		for k := 0; k < 20; k++ {
+		for i := 0; i < numRoomsPerEpoch; i++ {
 			atomic.AddUint64(&numRooms, 1)
 			n := atomic.LoadUint64(&numRooms)
 
-			if n > uint64(endNum) {
-				<-done
+			if n > endNumRooms {
+				fmt.Println("end num rooms reached")
+				return
 			}
 
 			go func() {
 				jar, roomId, err := createRoom()
 				if err != nil {
-					log.Println("err creating room:", err)
+					fmt.Println("err creating room: ", err)
 					return
 				}
 
-				for i := 0; i < 10; i++ {
+				for j := 0; j < numClientsPerRoom; j++ {
 					go func() {
 						dialer := websocket.Dialer{
 							Jar: jar,
@@ -183,7 +186,8 @@ func main() {
 							nil,
 						)
 						if err != nil {
-							panic(err)
+							fmt.Println("err connecting to room: ", err)
+							return
 						}
 
 						go func() {
@@ -195,15 +199,16 @@ func main() {
 								[]byte(baseState),
 								&stateToSend,
 							); err != nil {
-								panic(err)
+								panic(fmt.Sprintf("err unmarshaling state: %s", err))
 							}
 
-							writeTicker := time.NewTicker(30 * time.Second)
+							writeTicker := time.NewTicker(10 * time.Second)
 
 							for {
 								<-writeTicker.C
+
 								if err := c.WriteJSON(stateToSend); err != nil {
-									log.Println(err)
+									fmt.Println("err writing: ", err)
 									return
 								}
 							}
@@ -211,11 +216,12 @@ func main() {
 
 						go func() {
 							var stateToReceive data.State
+
 							for {
 								if err := c.ReadJSON(
 									&stateToReceive,
 								); err != nil {
-									log.Println(err)
+									fmt.Println("err reading: ", err)
 									return
 								}
 							}
