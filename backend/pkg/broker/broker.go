@@ -12,6 +12,8 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
+var tr = otel.Tracer("pkg/broker/broker")
+
 type Message struct {
 	State *data.State
 	// Since redis' pubsub protocol does not have headers like the
@@ -20,10 +22,8 @@ type Message struct {
 	// that contains the trace ID and span ID:
 	// https://github.com/open-telemetry/opentelemetry-go/blob/d616df61f5d163589228c5ff3be4aa5415f5a884/propagation/trace_context_test.go#L38
 	// https://www.w3.org/TR/trace-context/#traceparent-header
-	Headers http.Header
+	Header http.Header
 }
-
-var tr = otel.Tracer("pkg/broker/broker")
 
 type PubSuber interface {
 	Publish(ctx context.Context, channel string, message interface{}) client.Err
@@ -38,12 +38,12 @@ func (b *B) Publish(ctx context.Context, rId string, s *data.State) error {
 	ctx, span := tr.Start(ctx, "broker publish")
 	defer span.End()
 
-	rs := &Message{State: s, Headers: map[string][]string{}}
+	m := &Message{State: s, Header: http.Header{}}
 
 	var pr propagation.TraceContext
-	pr.Inject(ctx, propagation.HeaderCarrier(rs.Headers))
+	pr.Inject(ctx, propagation.HeaderCarrier(m.Header))
 
-	byt, err := json.Marshal(rs)
+	byt, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
@@ -76,20 +76,20 @@ func (b *B) Subscribe(
 	}
 
 	pCh := p.Channel()
-	sCh := make(chan *Message)
+	mCh := make(chan *Message)
 
 	go func() {
 		ctx, span := tr.Start(ctx, "broker listening")
 		defer span.End()
 
-		defer close(sCh)
+		defer close(mCh)
 		defer p.Close()
 
 		for {
 			select {
-			case msg := <-pCh:
-				s := &Message{}
-				err := json.Unmarshal([]byte(msg.Payload), s)
+			case rawMsg := <-pCh:
+				m := &Message{}
+				err := json.Unmarshal([]byte(rawMsg.Payload), m)
 				if err != nil {
 					span.RecordError(err)
 
@@ -97,7 +97,7 @@ func (b *B) Subscribe(
 				}
 
 				select {
-				case sCh <- s:
+				case mCh <- m:
 				case <-ctx.Done():
 					return
 				}
@@ -107,5 +107,5 @@ func (b *B) Subscribe(
 		}
 	}()
 
-	return sCh, nil
+	return mCh, nil
 }

@@ -69,12 +69,12 @@ loop:
 
 func storeState(ctx context.Context, st *data.State, s *store.S) {
 	ctx, span := tr.Start(ctx, "store state")
-	//ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
-	// defer func() {
-	// 	//cancel()
-	span.End()
-	// }()
+	defer func() {
+		cancel()
+		span.End()
+	}()
 
 	_, err := s.StoreState(ctx, st)
 	if err != nil {
@@ -99,23 +99,15 @@ func main() {
 	q := broker.New(mustNewRedisClient(qURL, qPool))
 	s := store.New(mustNewRedisClient(dURL, dPool))
 
-	br, err := q.Subscribe(context.Background(), qKey)
+	msgs, err := q.Subscribe(context.Background(), qKey)
 	if err != nil {
 		panic(err)
 	}
 
-	for rs := range br {
-		// sctx := trace.NewSpanContext(
-		// 	trace.SpanContextConfig{
-		// 		TraceID: rs.TraceID,
-		// 		SpanID:  rs.SpanID,
-		// 		Remote:  rs.Remote,
-		// 	},
-		// )
-
-		// ctx := trace.ContextWithRemoteSpanContext(context.Background(), sctx)
+	for m := range msgs {
 		var pr propagation.TraceContext
-		ctx := pr.Extract(context.Background(), propagation.HeaderCarrier(rs.Headers))
-		go storeState(ctx, rs.State, s)
+		ctx := pr.Extract(context.Background(), propagation.HeaderCarrier(m.Header))
+
+		go storeState(ctx, m.State, s)
 	}
 }
