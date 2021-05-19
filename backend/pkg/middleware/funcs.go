@@ -11,10 +11,9 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 )
 
-var tr = otel.Tracer("pkg/handlers/middleware/funcs")
+var tr = otel.Tracer("pkg/middleware")
 
 type TokenValidator interface {
 	ValidateToken(
@@ -34,7 +33,6 @@ func AuthFunc(t TokenValidator, route string) func(next http.Handler) http.Handl
 			if !data.RoomIDRegex.MatchString(rId) {
 				err := fmt.Errorf("invalid room id '%s'", rId)
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
 
 				http.Error(
 					w,
@@ -48,7 +46,6 @@ func AuthFunc(t TokenValidator, route string) func(next http.Handler) http.Handl
 			c := auth.NewComparisonClaims(rId)
 			if err := t.ValidateToken(r.Context(), r, c); err != nil {
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
 
 				http.Error(
 					w,
@@ -97,6 +94,7 @@ func MethodTypeFunc(t string) func(next http.Handler) http.Handler {
 			defer span.End()
 
 			if r.Method != t {
+				span.RecordError(fmt.Errorf("'%s' not allowed", r.Method))
 				http.Error(
 					w,
 					http.StatusText(http.StatusMethodNotAllowed),

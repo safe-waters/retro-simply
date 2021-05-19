@@ -13,7 +13,6 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -56,15 +55,13 @@ func NewRetrospective(
 }
 
 func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx, span := retTr.Start(r.Context(), "ServeHTTP")
+	ctx, span := retTr.Start(r.Context(), "handlers serve http")
 	defer span.End()
 
 	u, ok := user.FromContext(ctx)
 	if !ok || u.RoomId == "" {
 		err := fmt.Errorf("user '%v' incorrectly set", u)
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
 		http.Error(
 			w,
 			http.StatusText(http.StatusInternalServerError),
@@ -77,8 +74,6 @@ func (rt *Retrospective) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	wsc, err := (&websocket.Upgrader{}).Upgrade(w, r, nil)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-
 		http.Error(
 			w,
 			http.StatusText(http.StatusInternalServerError),
@@ -141,7 +136,7 @@ func (c *client) run(ctx context.Context, rId string) {
 	span := trace.SpanFromContext(ctx)
 	ctx = trace.ContextWithSpan(context.Background(), span)
 
-	ctx, span = retTr.Start(ctx, "run")
+	ctx, span = retTr.Start(ctx, "handlers run")
 	ctx, cancel := context.WithCancel(ctx)
 
 	span.AddEvent("client started")
@@ -161,7 +156,6 @@ func (c *client) run(ctx context.Context, rId string) {
 	br, err := c.ps.Subscribe(ctx, rId)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 
 		close(c.wDone)
 		close(c.rDone)
@@ -181,7 +175,6 @@ func (c *client) run(ctx context.Context, rId string) {
 			return
 		default:
 			span.RecordError(err)
-			span.SetStatus(codes.Error, err.Error())
 
 			close(c.wDone)
 			close(c.rDone)
@@ -192,7 +185,6 @@ func (c *client) run(ctx context.Context, rId string) {
 
 	if err := c.wsc.WriteJSON(s); err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 
 		close(c.wDone)
 		close(c.rDone)
@@ -205,7 +197,7 @@ func (c *client) run(ctx context.Context, rId string) {
 }
 
 func (c *client) readMessages(ctx context.Context, rId string) {
-	ctx, span := retTr.Start(ctx, "readMessages")
+	ctx, span := retTr.Start(ctx, "handlers read messages")
 
 	span.AddEvent("read loop started")
 
@@ -239,22 +231,17 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 			if s.RoomId != rId {
 				err := errors.New("read state contains the wrong roomId")
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
 
 				return
 			}
 
 			if err := c.ps.Publish(ctx, rId, &s); err != nil {
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-
 				return
 			}
 
 			if err := c.p.Publish(ctx, c.pKey, &s); err != nil {
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-
 				return
 			}
 		}
@@ -262,7 +249,7 @@ func (c *client) readMessages(ctx context.Context, rId string) {
 }
 
 func (c *client) writeMessages(ctx context.Context, br <-chan *broker.Message) {
-	ctx, span := retTr.Start(ctx, "writeMessages")
+	ctx, span := retTr.Start(ctx, "handlers write messages")
 
 	span.AddEvent("write loop started")
 
@@ -282,7 +269,6 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *broker.Message) {
 			if !ok {
 				err := errors.New("broadcast closed")
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
 
 				return
 			}
@@ -290,8 +276,6 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *broker.Message) {
 			_ = c.wsc.SetWriteDeadline(time.Now().Add(wWait))
 			if err := c.wsc.WriteJSON(m.State); err != nil {
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-
 				return
 			}
 		case <-t.C:
@@ -300,8 +284,6 @@ func (c *client) writeMessages(ctx context.Context, br <-chan *broker.Message) {
 				websocket.PingMessage, nil,
 			); err != nil {
 				span.RecordError(err)
-				span.SetStatus(codes.Error, err.Error())
-
 				return
 			}
 		case <-ctx.Done():

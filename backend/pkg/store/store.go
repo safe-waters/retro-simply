@@ -11,7 +11,10 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/safe-waters/retro-simply/backend/pkg/client"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
+	"go.opentelemetry.io/otel"
 )
+
+var tr = otel.Tracer("pkg/store")
 
 const (
 	pPrefix = "password"
@@ -29,13 +32,21 @@ type S struct{ d DatabaseGetWatchSetter }
 func New(d DatabaseGetWatchSetter) *S { return &S{d: d} }
 
 func (s *S) State(ctx context.Context, rId string) (*data.State, error) {
+	ctx, span := tr.Start(ctx, "get state")
+	defer span.End()
+
 	k := s.getKey(sPrefix, rId)
 
 	v, err := s.d.Get(ctx, k).Result()
 	if err != nil {
+		span.RecordError(err)
+
 		switch err {
 		case redis.Nil:
-			return nil, DataDoesNotExistError{err}
+			err := DataDoesNotExistError{err}
+			span.RecordError(err)
+
+			return nil, err
 		default:
 			return nil, err
 		}
@@ -45,6 +56,7 @@ func (s *S) State(ctx context.Context, rId string) (*data.State, error) {
 
 	b := []byte(v)
 	if err := json.Unmarshal(b, &st); err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
@@ -56,23 +68,35 @@ type retroCardWithIndex struct {
 	index     int
 }
 
-func (s *S) mergeState(os *data.State, st *data.State) (*data.State, error) {
+func (s *S) mergeState(ctx context.Context, os *data.State, st *data.State) (*data.State, error) {
+	_, span := tr.Start(ctx, "merge state")
+	defer span.End()
+
 	var ms data.State
 
 	// copy oldState into mergedState, so mergedState can be used as a
 	// starting point and changed without changing oldState
 	msByt, err := json.Marshal(os)
 	if err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
 	if err := json.Unmarshal(msByt, &ms); err != nil {
+		span.RecordError(err)
 		return nil, err
 	}
 
 	// Adding new columns is not allowed
 	if len(os.Columns) != len(st.Columns) {
-		return nil, fmt.Errorf("expected old state columns %d, got state columns %d", len(os.Columns), len(st.Columns))
+		err := fmt.Errorf(
+			"expected old state columns %d, got state columns %d",
+			len(os.Columns),
+			len(st.Columns),
+		)
+		span.RecordError(err)
+
+		return nil, err
 	}
 
 	// Save any new cards, which will be used to make sure upvotes
@@ -82,7 +106,14 @@ func (s *S) mergeState(os *data.State, st *data.State) (*data.State, error) {
 	for i := 0; i < len(st.Columns); i++ {
 		// changing the order of columns is not allowed
 		if os.Columns[i].Id != st.Columns[i].Id {
-			return nil, fmt.Errorf("expected old state columns id %s, got state columns id %s", os.Columns[i].Id, st.Columns[i].Id)
+			err := fmt.Errorf(
+				"expected old state columns id %s, got state columns id %s",
+				os.Columns[i].Id,
+				st.Columns[i].Id,
+			)
+			span.RecordError(err)
+
+			return nil, err
 		}
 
 		for j := 0; j < len(st.Columns[i].Groups); j++ {
@@ -323,16 +354,24 @@ func (s *S) mergeState(os *data.State, st *data.State) (*data.State, error) {
 }
 
 func (s *S) StoreState(ctx context.Context, st *data.State) (*data.State, error) {
+	ctx, span := tr.Start(ctx, "store state")
+	defer span.End()
+
 	var ms *data.State
 	k := s.getKey(sPrefix, st.RoomId)
 
 	txf := func(tx *redis.Tx) error {
+		ctx, span := tr.Start(ctx, "transaction")
+		defer span.End()
+
 		var err error
 
 		// If oldState does not exist, use state. Otherwise,
 		// merge oldState and state.
 		os, err := s.State(ctx, st.RoomId)
 		if err != nil {
+			span.RecordError(err)
+
 			switch err.(type) {
 			case DataDoesNotExistError:
 				ms = st
@@ -342,14 +381,16 @@ func (s *S) StoreState(ctx context.Context, st *data.State) (*data.State, error)
 		}
 
 		if ms == nil {
-			ms, err = s.mergeState(os, st)
+			ms, err = s.mergeState(ctx, os, st)
 			if err != nil {
+				span.RecordError(err)
 				return err
 			}
 		}
 
 		msByt, err := json.Marshal(ms)
 		if err != nil {
+			span.RecordError(err)
 			return err
 		}
 
@@ -359,6 +400,10 @@ func (s *S) StoreState(ctx context.Context, st *data.State) (*data.State, error)
 			pipe.Set(ctx, k, msByt, 0)
 			return nil
 		})
+
+		if err != nil {
+			span.RecordError(err)
+		}
 
 		return err
 	}
@@ -379,6 +424,8 @@ func (s *S) StoreState(ctx context.Context, st *data.State) (*data.State, error)
 	for i := 0; i < retries; i++ {
 		err = s.d.Watch(ctx, txf, k)
 		if err != nil {
+			span.RecordError(err)
+
 			switch err {
 			case redis.TxFailedErr:
 				// If the transaction failed, try again
@@ -441,28 +488,43 @@ func (s *S) applyNumUpvotesToCardChain(id string, cardsById map[string]*data.Ret
 func (s *S) getIdWithoutPk(id string) string { return id[:strings.LastIndex(id, pkPrefix)] }
 
 func (s *S) StoreHashedPassword(ctx context.Context, rId string, h string) error {
+	ctx, span := tr.Start(ctx, "store hashed password")
+	defer span.End()
+
 	k := s.getKey(pPrefix, rId)
 
 	didSet, err := s.d.SetNX(ctx, k, []byte(h), 0).Result()
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
 	if !didSet {
-		return DataAlreadyExistsError{fmt.Errorf("room '%s' already exists", rId)}
+		err := DataAlreadyExistsError{fmt.Errorf("room '%s' already exists", rId)}
+		span.RecordError(err)
+
+		return err
 	}
 
 	return nil
 }
 
 func (s *S) HashedPassword(ctx context.Context, rId string) (string, error) {
+	ctx, span := tr.Start(ctx, "get hashed password")
+	defer span.End()
+
 	k := s.getKey(pPrefix, rId)
 
 	h, err := s.d.Get(ctx, k).Result()
 	if err != nil {
+		span.RecordError(err)
+
 		switch err {
 		case redis.Nil:
-			return "", DataDoesNotExistError{fmt.Errorf("room '%s' does not exist", rId)}
+			err := DataDoesNotExistError{fmt.Errorf("room '%s' does not exist", rId)}
+			span.RecordError(err)
+
+			return "", err
 		default:
 			return "", err
 		}

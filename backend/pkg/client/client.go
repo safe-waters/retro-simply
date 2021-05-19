@@ -5,7 +5,10 @@ import (
 	"time"
 
 	"github.com/go-redis/redis/v8"
+	"go.opentelemetry.io/otel"
 )
+
+var tr = otel.Tracer("pkg/client")
 
 type PubSubChannel interface {
 	Receive(ctx context.Context) (interface{}, error)
@@ -43,6 +46,9 @@ func New(url string, poolSize int) (*C, error) {
 }
 
 func (c *C) Subscribe(ctx context.Context, channels ...string) PubSubChannel {
+	ctx, span := tr.Start(ctx, "client subscribe")
+	defer span.End()
+
 	return c.Client.Subscribe(ctx, channels...)
 }
 
@@ -51,10 +57,16 @@ func (c *C) Publish(
 	channel string,
 	message interface{},
 ) Err {
+	ctx, span := tr.Start(ctx, "client publish")
+	defer span.End()
+
 	return c.Client.Publish(ctx, channel, message)
 }
 
 func (c *C) Get(ctx context.Context, key string) StrResult {
+	ctx, span := tr.Start(ctx, "client get")
+	defer span.End()
+
 	return c.Client.Get(ctx, key)
 }
 
@@ -63,6 +75,9 @@ func (c *C) Watch(
 	fn func(*redis.Tx) error,
 	keys ...string,
 ) error {
+	ctx, span := tr.Start(ctx, "client watch")
+	defer span.End()
+
 	return c.Client.Watch(ctx, fn, keys...)
 }
 
@@ -72,5 +87,8 @@ func (c *C) SetNX(
 	value interface{},
 	expiration time.Duration,
 ) BoolResult {
+	ctx, span := tr.Start(ctx, "client setnx")
+	defer span.End()
+
 	return c.Client.SetNX(ctx, key, value, expiration)
 }

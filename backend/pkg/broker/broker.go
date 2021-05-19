@@ -8,11 +8,10 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/client"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 )
 
-var tr = otel.Tracer("pkg/broker/broker")
+var tr = otel.Tracer("pkg/broker")
 
 type Message struct {
 	State *data.State
@@ -45,10 +44,12 @@ func (b *B) Publish(ctx context.Context, rId string, s *data.State) error {
 
 	byt, err := json.Marshal(m)
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
 	if err = b.ps.Publish(ctx, rId, byt).Err(); err != nil {
+		span.RecordError(err)
 		return err
 	}
 
@@ -68,7 +69,6 @@ func (b *B) Subscribe(
 	_, err := p.Receive(ctx)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 
 		_ = p.Close()
 

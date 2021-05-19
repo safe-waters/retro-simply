@@ -13,7 +13,6 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
 	"github.com/safe-waters/retro-simply/backend/pkg/tracer_provider"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 )
 
@@ -68,7 +67,7 @@ loop:
 }
 
 func storeState(ctx context.Context, st *data.State, s *store.S) {
-	ctx, span := tr.Start(ctx, "store state")
+	ctx, span := tr.Start(ctx, "worker store state")
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 
 	defer func() {
@@ -79,7 +78,6 @@ func storeState(ctx context.Context, st *data.State, s *store.S) {
 	_, err := s.StoreState(ctx, st)
 	if err != nil {
 		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
 	}
 }
 

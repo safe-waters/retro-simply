@@ -102,13 +102,17 @@ func (e *erroneousMockGetHashedPassword) HashedPassword(
 
 type erroneousMockHashPassword struct{ PasswordHashComparer }
 
-func (e *erroneousMockHashPassword) HashPassword(p string) (string, error) {
+func (e *erroneousMockHashPassword) HashPassword(
+	ctx context.Context,
+	p string,
+) (string, error) {
 	return "", errors.New("")
 }
 
 type erroneousMockCompareHashAndPassword struct{ PasswordHashComparer }
 
 func (e *erroneousMockCompareHashAndPassword) CompareHashAndPassword(
+	ctx context.Context,
 	h,
 	p string,
 ) error {

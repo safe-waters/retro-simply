@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"testing"
 )
@@ -17,7 +18,11 @@ func TestCompareAndHashPassword(t *testing.T) {
 	t.Parallel()
 
 	p, h := hashPassword(t, password)
-	if err := p.CompareHashAndPassword(h, password); err != nil {
+	if err := p.CompareHashAndPassword(
+		context.Background(),
+		h,
+		password,
+	); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -27,6 +32,7 @@ func TestInvalidCompareAndHashPassword(t *testing.T) {
 
 	p, h := hashPassword(t, password)
 	if err := p.CompareHashAndPassword(
+		context.Background(),
 		h,
 		fmt.Sprintf("wrong%s", password),
 	); err == nil {
@@ -37,7 +43,7 @@ func TestInvalidCompareAndHashPassword(t *testing.T) {
 func hashPassword(t *testing.T, password string) (*PasswordManager, string) {
 	p := NewPasswordManager()
 
-	h, err := p.HashPassword("test")
+	h, err := p.HashPassword(context.Background(), "test")
 	if err != nil {
 		t.Fatal(err)
 	}
