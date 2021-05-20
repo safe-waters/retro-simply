@@ -27,7 +27,13 @@ persist indefinitely on `retrosimply.com`
 * Messages are broadcast to other clients via `Redis`' pub sub message broker
 * HTTPS is handled via `Caddy` / `Let's Encrypt`
 * Auth is handled using JWTs stored as HTTP-only cookies
+* Telemetry is handled via `Open Telemetry` with `Jaeger` as a backend
 * Services are orchestrated via `docker-compose`
+
+## Telemetry
+* The app is instrumented with Open Telemetry tracing. Part of a trace viewed
+  in Jaeger looks like:
+![Otel](./docs/otel.png)
 
 ## Developing
 * To make code changes, open the project in the `VSCode` dev container
@@ -37,7 +43,9 @@ persist indefinitely on `retrosimply.com`
 
 ### Quickstart
 * After following the steps above, run: `make`, which will run all the production
-  services locally. Access them at `https://localhost`
+  services locally.
+* Access the app at `https://localhost`
+* Access telemetry at `http://localhost:16686`
 * When finished, run: `make prod-down-volumes` to teardown the services and volumes
 
 ### Helpful commands
