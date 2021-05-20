@@ -61,12 +61,6 @@ services:
       BADGER_DIRECTORY_VALUE: /badger/data
       BADGER_DIRECTORY_KEY: /badger/key
   otel-collector:
-    image: otel/opentelemetry-collector:latest
-    command: ["--config=/etc/otel-collector-config.yml"]
-    volumes:
-      - "${DEV_HOST_PATH?}/otel-collector-config.yml:/etc/otel-collector-config.yml"
+    build: ./otel-collector
   otel-agent:
-    image: otel/opentelemetry-collector:latest
-    command: ["--config=/etc/otel-agent-config.yml"]
-    volumes:
-      - "${DEV_HOST_PATH?}/otel-agent-config.yml:/etc/otel-agent-config.yml"
+    build: ./otel-agent
