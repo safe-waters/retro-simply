@@ -51,15 +51,9 @@ services:
     - 80:80
     - 443:443
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    build: ./jaeger
     ports:
       - "16686:16686"
-    # https://github.com/jaegertracing/jaeger/issues/1543#issuecomment-495777421
-    environment:
-      BADGER_EPHEMERAL: 'false'
-      SPAN_STORAGE_TYPE: badger
-      BADGER_DIRECTORY_VALUE: /badger/data
-      BADGER_DIRECTORY_KEY: /badger/key
   otel-collector:
     build: ./otel-collector
   otel-agent:
