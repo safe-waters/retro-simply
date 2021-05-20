@@ -54,6 +54,12 @@ services:
     image: jaegertracing/all-in-one:latest
     ports:
       - "16686:16686"
+    # https://github.com/jaegertracing/jaeger/issues/1543#issuecomment-495777421
+    environment:
+      BADGER_EPHEMERAL: 'false'
+      SPAN_STORAGE_TYPE: badger
+      BADGER_DIRECTORY_VALUE: /badger/data
+      BADGER_DIRECTORY_KEY: /badger/key
   otel-collector:
     image: otel/opentelemetry-collector:latest
     command: ["--config=/etc/otel-collector-config.yml"]

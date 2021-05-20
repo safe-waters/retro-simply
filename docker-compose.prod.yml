@@ -11,7 +11,11 @@ services:
     build: server
     environment:
       PORT: "${FRONTEND_PORT?}"
+  jaeger:
+    volumes:
+    - jaeger_prod_data:/badger
 
 volumes:
   reverse_proxy_prod_data:
   store_prod_data:
+  jaeger_prod_data:

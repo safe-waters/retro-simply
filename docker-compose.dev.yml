@@ -22,8 +22,12 @@ services:
       target: dev
     volumes:
     - reverse_proxy_dev_data:/data
+  jaeger:
+    volumes:
+    - jaeger_dev_data:/badger
 
 volumes:
   reverse_proxy_dev_data:
   node_modules:
   store_dev_data:
+  jaeger_dev_data:
