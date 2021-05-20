@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/google/uuid"
 	"github.com/safe-waters/retro-simply/backend/pkg/auth"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
@@ -63,18 +62,6 @@ func AuthFunc(t TokenValidator, route string) func(next http.Handler) http.Handl
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
-}
-
-func CorrelationIDFunc(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, span := tr.Start(r.Context(), "correlation id middleware")
-		defer span.End()
-
-		u, _ := user.FromContext(r.Context())
-		u.CorrelationId = uuid.New().String()
-		ctx := user.WithContext(r.Context(), u)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
 }
 
 func JSONContentTypeFunc(next http.Handler) http.Handler {

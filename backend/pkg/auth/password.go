@@ -14,7 +14,10 @@ type PasswordManager struct{}
 
 func NewPasswordManager() *PasswordManager { return &PasswordManager{} }
 
-func (pm *PasswordManager) HashPassword(ctx context.Context, p string) (string, error) {
+func (pm *PasswordManager) HashPassword(
+	ctx context.Context,
+	p string,
+) (string, error) {
 	_, span := pTr.Start(ctx, "auth hash password")
 	defer span.End()
 
@@ -27,7 +30,11 @@ func (pm *PasswordManager) HashPassword(ctx context.Context, p string) (string, 
 	return string(h), nil
 }
 
-func (pm *PasswordManager) CompareHashAndPassword(ctx context.Context, h, p string) error {
+func (pm *PasswordManager) CompareHashAndPassword(
+	ctx context.Context,
+	h,
+	p string,
+) error {
 	_, span := pTr.Start(ctx, "auth compare hash and password")
 	defer span.End()
 

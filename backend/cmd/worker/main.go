@@ -104,7 +104,10 @@ func main() {
 
 	for m := range msgs {
 		var pr propagation.TraceContext
-		ctx := pr.Extract(context.Background(), propagation.HeaderCarrier(m.Header))
+		ctx := pr.Extract(
+			context.Background(),
+			propagation.HeaderCarrier(m.Header),
+		)
 
 		go storeState(ctx, m.State, s)
 	}
