@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 )
 
-var tr = otel.Tracer("cmd/worker/main")
+var tr = otel.Tracer("cmd/worker")
 
 func mustGetEnvStr(k string) string {
 	v := os.Getenv(k)

@@ -485,9 +485,11 @@ func (s *S) applyNumUpvotesToCardChain(id string, cardsById map[string]*data.Ret
 	}
 }
 
-func (s *S) getIdWithoutPk(id string) string { return id[:strings.LastIndex(id, pkPrefix)] }
+func (s *S) getIdWithoutPk(id string) string {
+	return id[:strings.LastIndex(id, pkPrefix)]
+}
 
-func (s *S) StoreHashedPassword(ctx context.Context, rId string, h string) error {
+func (s *S) StoreHashedPassword(ctx context.Context, rId, h string) error {
 	ctx, span := tr.Start(ctx, "store hashed password")
 	defer span.End()
 

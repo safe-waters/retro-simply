@@ -31,12 +31,9 @@ type Claims struct {
 }
 
 func NewClaims(rId string, exp time.Time) *Claims {
-	stdC := &jwt.StandardClaims{ExpiresAt: exp.Unix()}
-	cc := &ComparisonClaims{RoomId: rId}
-
 	return &Claims{
-		ComparisonClaims: cc,
-		StandardClaims:   stdC,
+		ComparisonClaims: &ComparisonClaims{RoomId: rId},
+		StandardClaims:   &jwt.StandardClaims{ExpiresAt: exp.Unix()},
 	}
 }
 

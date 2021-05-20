@@ -14,13 +14,13 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-var _ http.Handler = (*Registration)(nil)
-
 var regTr = otel.Tracer("pkg/handlers/registration")
+
+var _ http.Handler = (*Registration)(nil)
 
 type PasswordHashStorer interface {
 	HashedPassword(ctx context.Context, rId string) (string, error)
-	StoreHashedPassword(ctx context.Context, rId string, h string) error
+	StoreHashedPassword(ctx context.Context, rId, h string) error
 }
 
 type TokenSetter interface {

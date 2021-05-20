@@ -132,19 +132,19 @@ func TestBroker(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	rId := "test"
 
-	sCh, err := b.Subscribe(ctx, rId)
+	mCh, err := b.Subscribe(ctx, rId)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	b.Publish(ctx, rId, &es)
 
-	gs := <-sCh
-	expectState(t, &es, gs.State)
+	gs := (<-mCh).State
+	expectState(t, &es, gs)
 
 	cancel()
 
-	expectCloseStateChannel(t, sCh)
+	expectCloseMessageChannel(t, mCh)
 	expectClosePubSubChannel(t, 1, m.mps.closeSpy)
 }
 
@@ -158,9 +158,9 @@ func expectState(t *testing.T, expected, got interface{}) {
 	}
 }
 
-func expectCloseStateChannel(t *testing.T, sCh <-chan *Message) {
+func expectCloseMessageChannel(t *testing.T, mCh <-chan *Message) {
 	select {
-	case _, ok := <-sCh:
+	case _, ok := <-mCh:
 		if ok {
 			t.Fatal("expected state channel to close")
 		}

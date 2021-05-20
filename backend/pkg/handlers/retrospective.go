@@ -16,9 +16,9 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-var _ http.Handler = (*Retrospective)(nil)
-
 var retTr = otel.Tracer("pkg/handlers/retrospective")
+
+var _ http.Handler = (*Retrospective)(nil)
 
 type Stater interface {
 	State(ctx context.Context, rId string) (*data.State, error)

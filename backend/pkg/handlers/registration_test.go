@@ -64,7 +64,7 @@ func (m *mockPasswordStore) HashedPassword(
 
 func (m *mockPasswordStore) StoreHashedPassword(
 	ctx context.Context,
-	rId string,
+	rId,
 	h string,
 ) error {
 	m.mu.Lock()
@@ -85,7 +85,7 @@ type erroneousMockStoreHashedPassword struct{ PasswordHashStorer }
 
 func (e *erroneousMockStoreHashedPassword) StoreHashedPassword(
 	ctx context.Context,
-	rId string,
+	rId,
 	h string,
 ) error {
 	return errors.New("")

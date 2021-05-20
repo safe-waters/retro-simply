@@ -145,7 +145,12 @@ func main() {
 			<-progressTicker.C
 
 			n := atomic.LoadUint64(&numRooms)
-			fmt.Printf("snapshot at %ds - running: %d rooms (%d clients) \n", secs, n, numClientsPerRoom*int(n))
+			fmt.Printf(
+				"snapshot at %ds - running: %d rooms (%d clients)\n",
+				secs,
+				n,
+				numClientsPerRoom*int(n),
+			)
 			secs++
 		}
 	}()
@@ -182,7 +187,8 @@ func main() {
 								"%s%s%s",
 								"wss://localhost",
 								"/api/v1/retrospectives/",
-								roomId),
+								roomId,
+							),
 							nil,
 						)
 						if err != nil {
@@ -193,13 +199,16 @@ func main() {
 						go func() {
 							var stateToSend data.State
 
-							baseState := fmt.Sprintf(baseState, roomId)
-
 							if err := json.Unmarshal(
-								[]byte(baseState),
+								[]byte(fmt.Sprintf(baseState, roomId)),
 								&stateToSend,
 							); err != nil {
-								panic(fmt.Sprintf("err unmarshaling state: %s", err))
+								panic(
+									fmt.Sprintf(
+										"err unmarshaling state: %s",
+										err,
+									),
+								)
 							}
 
 							writeTicker := time.NewTicker(10 * time.Second)
