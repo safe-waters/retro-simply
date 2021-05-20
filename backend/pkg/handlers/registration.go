@@ -10,15 +10,17 @@ import (
 
 	"github.com/safe-waters/retro-simply/backend/pkg/auth"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
-	"github.com/safe-waters/retro-simply/backend/pkg/logger"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
+	"go.opentelemetry.io/otel"
 )
+
+var regTr = otel.Tracer("pkg/handlers/registration")
 
 var _ http.Handler = (*Registration)(nil)
 
 type PasswordHashStorer interface {
 	HashedPassword(ctx context.Context, rId string) (string, error)
-	StoreHashedPassword(ctx context.Context, rId string, h string) error
+	StoreHashedPassword(ctx context.Context, rId, h string) error
 }
 
 type TokenSetter interface {
@@ -26,8 +28,8 @@ type TokenSetter interface {
 }
 
 type PasswordHashComparer interface {
-	HashPassword(p string) (string, error)
-	CompareHashAndPassword(h, p string) error
+	HashPassword(ctx context.Context, p string) (string, error)
+	CompareHashAndPassword(ctx context.Context, h, p string) error
 }
 
 type Registration struct {
@@ -52,37 +54,51 @@ func NewRegistration(
 }
 
 func (rg *Registration) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	switch strings.TrimPrefix(r.URL.Path, rg.route) {
+	ctx, span := regTr.Start(r.Context(), "handlers serve http")
+	defer span.End()
+
+	p := strings.TrimPrefix(r.URL.Path, rg.route)
+	switch p {
 	case "create":
-		rg.create(w, r)
+		rg.create(ctx, w, r)
 	case "join":
-		rg.join(w, r)
+		rg.join(ctx, w, r)
 	default:
+		err := fmt.Errorf("'%s' not found", p)
+		span.RecordError(err)
+
 		http.NotFound(w, r)
 	}
 }
 
-func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
-	rm, err := rg.decodeRoom(w, r)
+func (rg *Registration) create(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx, span := regTr.Start(ctx, "handlers create")
+	defer span.End()
+
+	rm, err := rg.decodeRoom(ctx, w, r)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
 		return
 	}
 
-	h, err := rg.phc.HashPassword(rm.Password)
+	h, err := rg.phc.HashPassword(ctx, rm.Password)
 	if err != nil {
-		logger.Error(r.Context(), err)
-
+		span.RecordError(err)
 		http.Error(
 			w,
 			http.StatusText(http.StatusInternalServerError),
 			http.StatusInternalServerError,
 		)
+
 		return
 	}
 
-	if err := rg.phs.StoreHashedPassword(r.Context(), rm.Id, h); err != nil {
-		logger.Error(r.Context(), err)
+	if err := rg.phs.StoreHashedPassword(ctx, rm.Id, h); err != nil {
+		span.RecordError(err)
 
 		switch err.(type) {
 		case store.DataAlreadyExistsError:
@@ -98,8 +114,8 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := rg.setToken(rm.Id, r, w); err != nil {
-		logger.Error(r.Context(), err)
+	if err := rg.setToken(ctx, rm.Id, r, w); err != nil {
+		span.RecordError(err)
 		return
 	}
 
@@ -110,16 +126,23 @@ func (rg *Registration) create(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
-	room, err := rg.decodeRoom(w, r)
+func (rg *Registration) join(
+	ctx context.Context,
+	w http.ResponseWriter,
+	r *http.Request,
+) {
+	ctx, span := regTr.Start(ctx, "handlers join")
+	defer span.End()
+
+	room, err := rg.decodeRoom(ctx, w, r)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
 		return
 	}
 
-	h, err := rg.phs.HashedPassword(r.Context(), room.Id)
+	h, err := rg.phs.HashedPassword(ctx, room.Id)
 	if err != nil {
-		logger.Error(r.Context(), err)
+		span.RecordError(err)
 
 		switch err.(type) {
 		case store.DataDoesNotExistError:
@@ -135,15 +158,15 @@ func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := rg.phc.CompareHashAndPassword(h, room.Password); err != nil {
-		logger.Error(r.Context(), err)
-
+	if err := rg.phc.CompareHashAndPassword(ctx, h, room.Password); err != nil {
+		span.RecordError(err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
+
 		return
 	}
 
-	if err := rg.setToken(room.Id, r, w); err != nil {
-		logger.Error(r.Context(), err)
+	if err := rg.setToken(ctx, room.Id, r, w); err != nil {
+		span.RecordError(err)
 		return
 	}
 
@@ -155,13 +178,19 @@ func (rg *Registration) join(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rg *Registration) decodeRoom(
+	ctx context.Context,
 	w http.ResponseWriter,
 	r *http.Request,
 ) (*data.Room, error) {
+	_, span := regTr.Start(ctx, "handlers decode room")
+	defer span.End()
+
 	d := json.NewDecoder(r.Body)
 
 	var room data.Room
 	if err := d.Decode(&room); err != nil {
+		span.RecordError(err)
+
 		var msg string
 		switch err.(type) {
 		case data.PasswordInvalidError, data.RoomIdInvalidError:
@@ -179,17 +208,23 @@ func (rg *Registration) decodeRoom(
 }
 
 func (rg *Registration) setToken(
+	ctx context.Context,
 	roomId string,
 	r *http.Request,
 	w http.ResponseWriter,
 ) error {
+	ctx, span := regTr.Start(ctx, "handlers set token")
+	defer span.End()
+
 	c := auth.NewClaims(roomId, time.Now().UTC().Add(time.Hour*24*7))
-	if err := rg.ts.SetToken(r.Context(), w, c); err != nil {
+	if err := rg.ts.SetToken(ctx, w, c); err != nil {
+		span.RecordError(err)
 		http.Error(
 			w,
 			http.StatusText(http.StatusInternalServerError),
 			http.StatusInternalServerError,
 		)
+
 		return err
 	}
 

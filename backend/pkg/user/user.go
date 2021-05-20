@@ -9,8 +9,7 @@ type key string
 const uKey key = "user"
 
 type U struct {
-	CorrelationId string
-	RoomId        string
+	RoomId string
 }
 
 func FromContext(ctx context.Context) (U, bool) {

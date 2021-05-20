@@ -18,6 +18,7 @@ services:
       BROKER_POOL_SIZE: "${API_BROKER_POOL_SIZE?}"
       QUEUE_POOL_SIZE: "${API_QUEUE_POOL_SIZE?}"
       QUEUE_KEY: "${API_QUEUE_KEY?}"
+      OTEL_AGENT_URL: "${OTEL_AGENT_URL?}"
   worker:
     command: ["/app/worker"]
     build:
@@ -30,6 +31,7 @@ services:
       QUEUE_POOL_SIZE: "${API_QUEUE_POOL_SIZE?}"
       DATA_STORE_URL: "${API_DATA_STORE_URL?}"
       DATA_STORE_POOL_SIZE: "${API_DATA_STORE_POOL_SIZE?}"
+      OTEL_AGENT_URL: "${OTEL_AGENT_URL?}"
   store:
     build: ./redis
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${API_DATA_STORE_PASSWORD?}"]
@@ -48,3 +50,11 @@ services:
     ports:
     - 80:80
     - 443:443
+  jaeger:
+    build: ./jaeger
+    ports:
+      - "16686:16686"
+  otel-collector:
+    build: ./otel-collector
+  otel-agent:
+    build: ./otel-agent

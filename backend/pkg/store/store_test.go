@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -2180,7 +2181,7 @@ func TestRedisDataStoreState(t *testing.T) {
 
 			s := &S{}
 
-			ms, err := s.mergeState(&os, &st)
+			ms, err := s.mergeState(context.Background(), &os, &st)
 			if err != nil {
 				t.Fatal(err)
 			}

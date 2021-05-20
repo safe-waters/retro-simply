@@ -8,7 +8,10 @@ import (
 	"time"
 
 	"github.com/dgrijalva/jwt-go"
+	"go.opentelemetry.io/otel"
 )
+
+var jTr = otel.Tracer("pkg/auth/jwt")
 
 type JWT struct{ secret []byte }
 
@@ -28,12 +31,9 @@ type Claims struct {
 }
 
 func NewClaims(rId string, exp time.Time) *Claims {
-	stdC := &jwt.StandardClaims{ExpiresAt: exp.Unix()}
-	cc := &ComparisonClaims{RoomId: rId}
-
 	return &Claims{
-		ComparisonClaims: cc,
-		StandardClaims:   stdC,
+		ComparisonClaims: &ComparisonClaims{RoomId: rId},
+		StandardClaims:   &jwt.StandardClaims{ExpiresAt: exp.Unix()},
 	}
 }
 
@@ -42,9 +42,13 @@ func (j *JWT) SetToken(
 	w http.ResponseWriter,
 	c *Claims,
 ) error {
+	_, span := jTr.Start(ctx, "auth set token")
+	defer span.End()
+
 	t := jwt.NewWithClaims(jwt.SigningMethodHS256, c)
 	signedT, err := t.SignedString(j.secret)
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
@@ -66,8 +70,12 @@ func (j *JWT) ValidateToken(
 	r *http.Request,
 	cc *ComparisonClaims,
 ) error {
+	_, span := jTr.Start(ctx, "auth validate token")
+	defer span.End()
+
 	ck, err := r.Cookie("token")
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
@@ -88,24 +96,34 @@ func (j *JWT) ValidateToken(
 		},
 	)
 	if err != nil {
+		span.RecordError(err)
 		return err
 	}
 
 	if !t.Valid {
-		return errors.New("invalid token")
+		err := errors.New("invalid token")
+		span.RecordError(err)
+
+		return err
 	}
 
 	c, ok := t.Claims.(*Claims)
 	if !ok {
-		return errors.New("invalid claims")
+		err := errors.New("invalid claims")
+		span.RecordError(err)
+
+		return err
 	}
 
 	if c.RoomId != cc.RoomId {
-		return fmt.Errorf(
+		err := fmt.Errorf(
 			"claims id: '%s' does not match room id: '%s'",
 			c.RoomId,
 			cc.RoomId,
 		)
+		span.RecordError(err)
+
+		return err
 	}
 
 	return nil

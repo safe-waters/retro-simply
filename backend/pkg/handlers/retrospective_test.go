@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	"github.com/safe-waters/retro-simply/backend/pkg/broker"
 	"github.com/safe-waters/retro-simply/backend/pkg/data"
 	"github.com/safe-waters/retro-simply/backend/pkg/user"
 )
@@ -93,11 +94,11 @@ func (m *mockStateStore) State(
 }
 
 type mockBroker struct {
-	ch chan *data.State
+	ch chan *broker.Message
 }
 
 func newMockBroker() *mockBroker {
-	ch := make(chan *data.State)
+	ch := make(chan *broker.Message)
 	return &mockBroker{
 		ch: ch,
 	}
@@ -106,7 +107,7 @@ func newMockBroker() *mockBroker {
 func (m *mockBroker) Subscribe(
 	ctx context.Context,
 	rId string,
-) (<-chan *data.State, error) {
+) (<-chan *broker.Message, error) {
 	return m.ch, nil
 }
 
@@ -116,7 +117,7 @@ func (m *mockBroker) Publish(
 	s *data.State,
 ) error {
 	go func() {
-		m.ch <- s
+		m.ch <- &broker.Message{State: s}
 	}()
 
 	return nil

@@ -14,6 +14,8 @@ import (
 	"github.com/safe-waters/retro-simply/backend/pkg/handlers"
 	"github.com/safe-waters/retro-simply/backend/pkg/middleware"
 	"github.com/safe-waters/retro-simply/backend/pkg/store"
+	"github.com/safe-waters/retro-simply/backend/pkg/tracer_provider"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func mustGetEnvStr(k string) string {
@@ -64,7 +66,10 @@ loop:
 	return c
 }
 
-func applyMiddleware(h http.Handler, mwfs ...func(next http.Handler) http.Handler) http.Handler {
+func applyMiddleware(
+	h http.Handler,
+	mwfs ...func(next http.Handler) http.Handler,
+) http.Handler {
 	for i := len(mwfs) - 1; i >= 0; i-- {
 		h = mwfs[i](h)
 	}
@@ -74,6 +79,7 @@ func applyMiddleware(h http.Handler, mwfs ...func(next http.Handler) http.Handle
 
 func main() {
 	var (
+		otelURL = mustGetEnvStr("OTEL_AGENT_URL")
 		dURL    = mustGetEnvStr("DATA_STORE_URL")
 		bURL    = mustGetEnvStr("BROKER_URL")
 		qURL    = mustGetEnvStr("QUEUE_URL")
@@ -85,6 +91,9 @@ func main() {
 		qPool   = mustGetEnvInt("QUEUE_POOL_SIZE")
 		qKey    = mustGetEnvStr("QUEUE_KEY")
 	)
+
+	shutdown := tracer_provider.Initialize(otelURL, "api")
+	defer shutdown()
 
 	s := store.New(mustNewRedisClient(dURL, dPool))
 	b := broker.New(mustNewRedisClient(bURL, bPool))
@@ -105,7 +114,6 @@ func main() {
 			pm,
 		),
 		middleware.MethodTypeFunc(http.MethodPost),
-		middleware.CorrelationIDFunc,
 		middleware.JSONContentTypeFunc,
 	)
 
@@ -117,12 +125,11 @@ func main() {
 			qKey,
 		),
 		middleware.MethodTypeFunc(http.MethodGet),
-		middleware.CorrelationIDFunc,
 		middleware.AuthFunc(j, retRoute),
 	)
 
-	http.Handle(regRoute, reg)
-	http.Handle(retRoute, ret)
+	http.Handle(regRoute, otelhttp.NewHandler(reg, regRoute))
+	http.Handle(retRoute, otelhttp.NewHandler(ret, retRoute))
 
 	http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 }
